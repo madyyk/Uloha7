@@ -64,8 +64,14 @@ resource "aws_security_group" "alb" {
   }
 }
 
+resource "random_string" "sg_suffix" {
+  length  = 6
+  upper   = false
+  special = false
+}
+
 resource "aws_security_group" "ecs_tasks" {
-  name        = "${var.project_name}-ecs-tasks-sg"
+  name_prefix = "${var.project_name}-ecs-tasks-"
   description = "Security group for ECS tasks"
   vpc_id      = data.aws_vpc.myvpc.id
 
@@ -75,7 +81,6 @@ resource "aws_security_group" "ecs_tasks" {
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
-
 
   egress {
     from_port   = 0
@@ -139,99 +144,7 @@ resource "aws_ecs_cluster" "lesson7" {
   name = "lesson7"
 }
 
-resource "aws_ecs_task_definition" "lesson7" {
-  family                   = "lesson7"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
-
-  container_definitions = jsonencode([
-    {
-      name  = "web"
-      image = "nginx:latest"
-      portMappings = [
-        {
-          containerPort = 80
-          hostPort      = 80
-
-          protocol = "tcp"
-        }
-      ]
-    }
-  ])
-}
-
-resource "aws_ecs_service" "lesson7" {
-  name            = "lesson7"
-  cluster         = aws_ecs_cluster.lesson7.id
-  task_definition = aws_ecs_task_definition.lesson7.arn
-  desired_count   = 1
-
-  launch_type = "FARGATE"
-
-  network_configuration {
-    subnets          = [data.aws_subnets.ecssubnets.ids[0], data.aws_subnets.ecssubnets.ids[1]]
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = true
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.main.arn
-    container_name   = "web"
-    container_port   = 80
-  }
-}
-
-resource "aws_lb_target_group" "nginx" {
-  name        = "${var.project_name}-tg"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = data.aws_vpc.myvpc.id
-  target_type = "ip"
-
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 5
-    interval            = 30
-    path                = "/"
-    matcher             = "200"
-  }
-
-  tags = {
-    Name = "${var.project_name}-tg"
-  }
-}
-
-resource "aws_lb_listener" "nginx" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.nginx.arn
-  }
-}
-
-# ECS Cluster
-resource "aws_ecs_cluster" "main" {
-  name = "${var.project_name}-cluster"
-
-  setting {
-    name  = "containerInsights"
-    value = "enabled"
-  }
-
-  tags = {
-    Name = "${var.project_name}-cluster"
-  }
-}
-
 # IAM Role for ECS Task Execution
-
 resource "aws_iam_role" "ecs_task_execution_role" {
   name = "${var.project_name}-ecs-task-execution-role"
 
@@ -267,30 +180,19 @@ resource "aws_cloudwatch_log_group" "nginx" {
 
 resource "aws_ecs_task_definition" "nginx" {
   family                   = "${var.project_name}-task"
-  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
   cpu                      = "256"
   memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
 
   container_definitions = jsonencode([
     {
-      name  = "nginx"
-      image = "nginx:alpine"
-
-      command = [
-        "sh",
-        "-c",
-        "printf '%b' '<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Custom NGINX Web</title>\n  </head>\n  <body>\n    <h1>Custom NGINX Web</h1>\n    <p>Toto je custom nginx webstranka deploynuta cez GitHub Actions</p>\n  </body>\n</html>' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"
-      ]
-
-      portMappings = [
-        {
-          containerPort = 80
-          protocol      = "tcp"
-        }
-      ]
-
+      name       = "nginx"
+      image      = "nginx:alpine"
+      entryPoint = ["sh","-c"]
+      command    = ["printf '%b' '<!doctype html>\n<html>\n    <head>\n        <meta charset=\"utf-8\">\n        <title>Custom NGINX Web</title>\n    </head>\n    <body>\n        <h1>Custom NGINX Web</h1>\n        <p>Toto je custom nxginx webstranka deploynuta cez github actions</p>\n    </body>\n</html>' > /usr/share/nginx/html/index.html && exec nginx -g \"daemon off;\""]
+      portMappings = [{ containerPort = 80, protocol = "tcp" }]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -299,17 +201,32 @@ resource "aws_ecs_task_definition" "nginx" {
           awslogs-stream-prefix = "ecs"
         }
       }
-
       essential = true
     }
   ])
-
-  tags = {
-    Name = "${var.project_name}-task"
-  }
 }
 
+resource "aws_ecs_service" "lesson7" {
+  name            = "lesson7"
+  cluster         = aws_ecs_cluster.lesson7.id
+  task_definition = aws_ecs_task_definition.nginx.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
 
+  network_configuration {
+    subnets          = [data.aws_subnets.ecssubnets.ids[0], data.aws_subnets.ecssubnets.ids[1]]
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = true
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.main.arn
+    container_name   = "nginx"
+    container_port   = 80
+  }
+
+  depends_on = [aws_lb_listener.http]
+}
 
 # Outputs
 output "load_balancer_dns" {
