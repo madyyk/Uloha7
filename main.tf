@@ -281,7 +281,7 @@ resource "aws_ecs_task_definition" "nginx" {
       command = [
         "sh",
         "-c",
-        "printf '%s' '<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Custom NGINX Web</title>\n  </head>\n  <body>\n    <h1>Custom NGINX Web</h1>\n    <p>Toto je custom nginx webstranka deploynuta cez GitHub Actions</p>\n  </body>\n</html>' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"
+        "printf '%b' '<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Custom NGINX Web</title>\n  </head>\n  <body>\n    <h1>Custom NGINX Web</h1>\n    <p>Toto je custom nginx webstranka deploynuta cez GitHub Actions</p>\n  </body>\n</html>' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"
       ]
 
       portMappings = [
