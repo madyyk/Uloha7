@@ -31,13 +31,6 @@ data "aws_subnets" "ecssubnets" {
   }
 }
 
-data "aws_subnets" "albsubnets" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.myvpc.id]
-  }
-}
-
 # Security Groups
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
@@ -100,7 +93,7 @@ resource "aws_lb" "main" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = data.aws_subnets.albsubnets.ids
+  subnets            = data.aws_subnets.ecssubnets.ids
 
   tags = {
     Name = "${var.project_name}-alb"
@@ -214,7 +207,7 @@ resource "aws_ecs_service" "lesson7" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = [data.aws_subnets.ecssubnets.ids[0], data.aws_subnets.ecssubnets.ids[1]]
+    subnets          = data.aws_subnets.ecssubnets.ids
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
